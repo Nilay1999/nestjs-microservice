@@ -7,6 +7,8 @@ import {
   Query,
   Param,
   Body,
+  Inject,
+  CACHE_MANAGER,
 } from "@nestjs/common";
 import {
   ClientProxy,
@@ -14,12 +16,13 @@ import {
   Transport,
 } from "@nestjs/microservices";
 import { CreateMagazineDTO } from "./magazines.dto";
+import { Cache } from "cache-manager";
 
 @Controller("magazines")
 export class MagazinesController {
   client: ClientProxy;
   logger = new Logger("Magazines");
-  constructor() {
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {
     this.client = ClientProxyFactory.create({
       transport: Transport.REDIS,
       options: {
@@ -32,7 +35,9 @@ export class MagazinesController {
   async getMagazines() {
     this.logger.log("Getting all magazines");
     const pattern = { cmd: "getMagazines" };
-    return await this.client.send(pattern, {});
+    const data = await this.client.send(pattern, {}).toPromise();
+    await this.cacheManager.set("manga", data, { ttl: 600 });
+    return data;
   }
 
   @Get(":id")

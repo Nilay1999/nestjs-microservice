@@ -7,6 +7,8 @@ import {
   Body,
   Delete,
   Query,
+  CACHE_MANAGER,
+  Inject,
 } from "@nestjs/common";
 import { CreateBookDTO } from "./book.dto";
 import {
@@ -16,12 +18,13 @@ import {
   Transport,
   ClientOptions,
 } from "@nestjs/microservices";
+import { Cache } from "cache-manager";
 
 @Controller("books")
 export class BooksController {
   client: ClientProxy;
   logger = new Logger("Books");
-  constructor() {
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {
     this.client = ClientProxyFactory.create({
       transport: Transport.REDIS,
       options: {
@@ -34,14 +37,17 @@ export class BooksController {
   async getBooks() {
     this.logger.log("Getting all books");
     const pattern = { cmd: "getBooks" };
-    return await this.client.send(pattern, {});
+    const data = await this.client.send(pattern, {}).toPromise();
+    return data;
   }
 
   @Get(":id")
   async getBook(@Param("id") id) {
     this.logger.log(id);
     const pattern = { cmd: "getBookById" };
-    return await this.client.send<number>(pattern, id);
+    const book = await this.client.send<number>(pattern, id);
+    await this.cacheManager.set("bookById", book, { ttl: 600 });
+    return book;
   }
 
   @Post()
